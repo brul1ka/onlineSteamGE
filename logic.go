@@ -8,26 +8,38 @@ import (
 	"strings"
 )
 
-func getAppByName(name string) (*AppItem, error) {
-	file, _ := os.Open("games_appid.json")
+func loadApps() *Apps {
+	file, err := os.Open("games_appid.json")
+	if err != nil {
+		return nil
+	}
 	defer file.Close()
 
 	var apps Apps
 	if err := json.NewDecoder(file).Decode(&apps); err != nil {
-		return nil, err
+		return &apps
 	}
-
-	for _, app := range apps {
-		if strings.EqualFold(app.Name, name) {
-			return &app, nil
-		}
-	}
-	return nil, fmt.Errorf("game not found")
+	return &apps
 }
 
-func GetSteamOnline(app *AppItem) string {
+func searchAppByName(name string) (*AppItem, []string) {
+	cleanName := strings.TrimSpace(name)
+
+	for i := range apps {
+		if strings.EqualFold(strings.TrimSpace(apps[i].Name), cleanName) {
+			return &apps[i], nil
+		}
+	}
+	filtered := filterAppsByQuery(name, &apps)
+	return nil, filtered
+}
+
+func getAppOnline(app *AppItem) string {
 	if app == nil {
 		return "There is no such game with this name!"
+	}
+	if app.Name == "" {
+		return "Not valid message"
 	}
 
 	url := fmt.Sprintf("https://api.steampowered.com/ISteamUserStats/GetNumberOfCurrentPlayers/v1/?appid=%d", app.AppID)
@@ -47,4 +59,39 @@ func GetSteamOnline(app *AppItem) string {
 	}
 
 	return fmt.Sprintf("📊 Now in game %s (appid: %d): %d people", app.Name, app.AppID, data.Response.PlayerCount)
+}
+
+func filterAppsByQuery(query string, apps *Apps) []string {
+	result := []string{}
+	queryWords := strings.Fields(strings.ToLower(query))
+
+	for _, app := range *apps {
+		counter := 0
+		appName := strings.ToLower(app.Name)
+
+		for _, word := range queryWords {
+			if strings.Contains(appName, word) {
+				counter++
+			}
+		}
+
+		if counter == len(queryWords) {
+			result = append(result, app.Name)
+		}
+		if len(result) >= 20 {
+			break
+		}
+	}
+	return result
+}
+
+func handleAppRequest(name string) string {
+	app, suggestions := searchAppByName(name)
+	if app != nil {
+		return getAppOnline(app)
+	} else if len(suggestions) > 0 {
+		return "Maybe you meant:\n" + strings.Join(suggestions, "\n")
+	} else {
+		return "There is no such game with this name!"
+	}
 }

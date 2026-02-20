@@ -1,11 +1,12 @@
 package main
 
 import (
-	"fmt"
 	"log"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
+
+var apps Apps
 
 func main() {
 
@@ -19,6 +20,11 @@ func main() {
 	u.Timeout = 60
 
 	updates := bot.GetUpdatesChan(u)
+
+	loaded := loadApps()
+	if loaded != nil {
+		apps = *loaded
+	}
 
 	for update := range updates {
 		if update.Message == nil {
@@ -41,11 +47,8 @@ func main() {
 		//
 		//
 		//
-		userAppName := msgTxt
-		app, err := getAppByName(userAppName)
-		if err != nil {
-			bot.Send(tgbotapi.NewMessage(chatID, fmt.Sprintf("error! %v", err)))
-		}
-		bot.Send(tgbotapi.NewMessage(chatID, GetSteamOnline(app)))
+		botMsg := handleAppRequest(msgTxt)
+		bot.Send(tgbotapi.NewMessage(chatID, botMsg))
+		log.Printf("[%s] %s", bot.Self.UserName, botMsg)
 	}
 }
