@@ -1,21 +1,11 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
-	"net/http"
-	"strconv"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
-
-type SteamResponse struct {
-	Response struct {
-		PlayerCount int `json:"player_count"`
-		Result      int `json:"result"`
-	} `json:"response"`
-}
 
 func main() {
 
@@ -42,8 +32,8 @@ func main() {
 		if update.Message.IsCommand() {
 			if update.Message.Command() == "start" {
 				log.Printf("User %s started bot: %s", userName, msgTxt)
-				msg := tgbotapi.NewMessage(chatID, "Hello! It's Online Steam, TG-bot to check online in Steam game!\nEnter appid to check it's online.")
-				bot.Send(msg)
+				welcomeMsg := tgbotapi.NewMessage(chatID, "Hello! It's Online Steam, TG-bot to check online in Steam game!\nEnter appid to check it's online.")
+				bot.Send(welcomeMsg)
 				continue
 			}
 		}
@@ -51,31 +41,11 @@ func main() {
 		//
 		//
 		//
-		appID, err := strconv.Atoi(msgTxt)
+		userAppName := msgTxt
+		app, err := getAppByName(userAppName)
 		if err != nil {
-			bot.Send(tgbotapi.NewMessage(chatID, "Enter correct integer please"))
-			continue
+			bot.Send(tgbotapi.NewMessage(chatID, fmt.Sprintf("error! %v", err)))
 		}
-
-		url := fmt.Sprintf("https://api.steampowered.com/ISteamUserStats/GetNumberOfCurrentPlayers/v1/?appid=%d", appID)
-		resp, err := http.Get(url)
-		if err != nil {
-			bot.Send(tgbotapi.NewMessage(chatID, "Error with connecting to Steam API!"))
-			continue
-		}
-		defer resp.Body.Close()
-
-		var data SteamResponse
-		if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-			bot.Send(tgbotapi.NewMessage(update.Message.Chat.ID, "Error trying to parse"))
-			continue
-		}
-		if data.Response.Result != 1 {
-			bot.Send(tgbotapi.NewMessage(chatID, "Game with this appID not found!"))
-			continue
-		}
-		finalMsg := fmt.Sprintf("📊 Now in game (AppID %d): %d people", appID, data.Response.PlayerCount)
-		bot.Send(tgbotapi.NewMessage(chatID, finalMsg))
-
+		bot.Send(tgbotapi.NewMessage(chatID, GetSteamOnline(app)))
 	}
 }
