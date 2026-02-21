@@ -85,13 +85,18 @@ func filterAppsByQuery(query string, apps *Apps) []string {
 	return result
 }
 
-func handleAppRequest(name string) string {
+func handleAppRequest(name string) (string, []string) {
 	app, suggestions := searchAppByName(name)
+
 	if app != nil {
-		return getAppOnline(app)
-	} else if len(suggestions) > 0 {
-		return "Maybe you meant:\n" + strings.Join(suggestions, "\n")
-	} else {
-		return "There is no such game with this name!"
+		return getAppOnline(app), nil
 	}
+	if len(suggestions) > 0 {
+		if len(suggestions) == 1 {
+			autoGame, _ := searchAppByName(suggestions[0])
+			return getAppOnline(autoGame), nil
+		}
+		return "Maybe you meant:", suggestions
+	}
+	return "There is no such game with this name!", nil
 }
