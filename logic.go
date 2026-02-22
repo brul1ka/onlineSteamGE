@@ -3,26 +3,18 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
+	"log"
 	"net/http"
 	"os"
 	"strings"
+
+	"github.com/robfig/cron/v3"
 )
 
-func loadApps() *Apps {
-	file, err := os.Open("games_appid.json")
-	if err != nil {
-		return nil
-	}
-	defer file.Close()
-
-	var apps Apps
-	if err := json.NewDecoder(file).Decode(&apps); err != nil {
-		return &apps
-	}
-	return &apps
-}
-
 func searchAppByName(name string) (*AppItem, []string) {
+	mutex.RLock()
+	defer mutex.RUnlock()
 	cleanName := strings.TrimSpace(name)
 
 	for i := range apps {
@@ -99,4 +91,71 @@ func handleAppRequest(name string) (string, []string) {
 		return "Maybe you meant:", suggestions
 	}
 	return "There is no such game with this name!", nil
+}
+
+func loadApps() *Apps {
+	file, err := os.Open("games_appid.json")
+	if err != nil {
+		return nil
+	}
+	defer file.Close()
+
+	var apps Apps
+	if err := json.NewDecoder(file).Decode(&apps); err != nil {
+		return &apps
+	}
+	return &apps
+}
+
+func getAppList() {
+	url := "https://raw.githubusercontent.com/jsnli/steamappidlist/refs/heads/master/data/games_appid.json"
+	resp, err := http.Get(url)
+	if err != nil {
+		log.Printf("Failed to get app list: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	file, err := os.Create("temp.json")
+	if err != nil {
+		log.Printf("Failed to create game list file: %v", err)
+		return
+	}
+
+	bytesWritten, err := io.Copy(file, resp.Body)
+	if err != nil {
+		file.Close()
+		log.Printf("Failed to copy stream to file: %v", err)
+		return
+	}
+	file.Close()
+
+	err = os.Rename("temp.json", "games_appid.json")
+	if err != nil {
+		log.Printf("Failed to rename file: %v", err)
+		return
+	}
+	os.Rename("temp.json", "games_appid.json")
+
+	loaded := loadApps()
+	if loaded != nil {
+		mutex.Lock()
+		apps = *loaded
+		mutex.Unlock()
+	}
+
+	log.Printf("Successfully got an app list. Bytes written: %d", bytesWritten)
+}
+
+func updateAppList() {
+	c := cron.New()
+
+	_, err := c.AddFunc("0 3 * * *", getAppList)
+	if err != nil {
+		log.Printf("Failed to configure cron: %v", err)
+		return
+	}
+
+	c.Start()
+	log.Print("cron started")
 }

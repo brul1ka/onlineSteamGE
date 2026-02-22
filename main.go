@@ -3,11 +3,15 @@ package main
 import (
 	"fmt"
 	"log"
+	"sync"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-var apps Apps
+var (
+	apps  Apps
+	mutex sync.RWMutex
+)
 
 func main() {
 
@@ -19,13 +23,10 @@ func main() {
 
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
-
 	updates := bot.GetUpdatesChan(u)
 
-	loaded := loadApps()
-	if loaded != nil {
-		apps = *loaded
-	}
+	getAppList()
+	go updateAppList()
 
 	for update := range updates {
 		if update.CallbackQuery != nil {
