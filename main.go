@@ -49,30 +49,36 @@ func main() {
 		chatID := update.Message.Chat.ID
 
 		if update.Message.IsCommand() {
-			if update.Message.Command() == "start" {
+			switch update.Message.Command() {
+			case "start":
 				log.Printf("User %s started bot: %s", userName, msgTxt)
-				welcomeMsg := tgbotapi.NewMessage(chatID, "Hello! It's Online Steam, TG-bot to check online in Steam game!\nEnter appid to check it's online.")
+				welcomeMsg := tgbotapi.NewMessage(chatID, "Hello! It's Online Steam, TG-bot to check online in Steam game!\nJust type name of the game you wanna check.")
 				bot.Send(welcomeMsg)
 				continue
+			case "find":
+				query := update.Message.CommandArguments()
+				if query == "" {
+					bot.Send(tgbotapi.NewMessage(chatID, "Please enter game name after /find"))
+					continue
+				}
+				msgText, suggestions := handleSearchRequest(query)
+				msg := tgbotapi.NewMessage(chatID, msgText)
+				if len(suggestions) > 0 {
+					msg.ReplyMarkup = createInlineKeyboard(suggestions)
+				}
+				bot.Send(msg)
 			}
+			continue
 		}
 		log.Printf("[%s] %s", userName, msgTxt)
 
 		botMsgText, suggestions := handleAppRequest(msgTxt)
 		botMsg := tgbotapi.NewMessage(chatID, botMsgText)
+
 		if len(suggestions) > 0 {
-			var rows [][]tgbotapi.InlineKeyboardButton
-			for _, name := range suggestions {
-				callbackData := name
-				if len(callbackData) > 64 {
-					callbackData = callbackData[:64]
-				}
-				btn := tgbotapi.NewInlineKeyboardButtonData(name, callbackData)
-				rows = append(rows, tgbotapi.NewInlineKeyboardRow(btn))
-			}
-			botMsg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(rows...)
+			botMsg.ReplyMarkup = createInlineKeyboard(suggestions)
 		}
+
 		bot.Send(botMsg)
-		log.Printf("[%s] %s", bot.Self.UserName, botMsgText)
 	}
 }

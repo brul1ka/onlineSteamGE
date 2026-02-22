@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/robfig/cron/v3"
 )
 
@@ -47,7 +48,7 @@ func getAppOnline(app *AppItem) string {
 	}
 
 	if data.Response.Result != 1 {
-		return "Game with this appID not found!"
+		return "Failed to retrieve online!\nMaybe this game isn't released"
 	}
 
 	return fmt.Sprintf("📊 Now in game %s (appid: %d): %d people", app.Name, app.AppID, data.Response.PlayerCount)
@@ -78,6 +79,8 @@ func filterAppsByQuery(query string, apps *Apps) []string {
 }
 
 func handleAppRequest(name string) (string, []string) {
+	mutex.RLock()
+	defer mutex.RUnlock()
 	app, suggestions := searchAppByName(name)
 
 	if app != nil {
@@ -86,11 +89,36 @@ func handleAppRequest(name string) (string, []string) {
 	if len(suggestions) > 0 {
 		if len(suggestions) == 1 {
 			autoGame, _ := searchAppByName(suggestions[0])
-			return getAppOnline(autoGame), nil
+			return fmt.Sprintf("🪄 Auto found!\n%s", getAppOnline(autoGame)), nil
 		}
-		return "Maybe you meant:", suggestions
+		return "No game with this name! Maybe you meant:", suggestions
 	}
 	return "There is no such game with this name!", nil
+}
+
+func handleSearchRequest(name string) (string, []string) {
+	mutex.RLock()
+	defer mutex.RUnlock()
+
+	suggestions := filterAppsByQuery(name, &apps)
+
+	if len(suggestions) > 0 {
+		return fmt.Sprintf("🔍 Search results for '%s':", name), suggestions
+	}
+	return "Nothing found for your request!", nil
+}
+
+func createInlineKeyboard(suggestions []string) tgbotapi.InlineKeyboardMarkup {
+	var rows [][]tgbotapi.InlineKeyboardButton
+	for _, name := range suggestions {
+		data := name
+		if len(data) > 64 {
+			data = data[:64]
+		}
+		btn := tgbotapi.NewInlineKeyboardButtonData(name, data)
+		rows = append(rows, tgbotapi.NewInlineKeyboardRow(btn))
+	}
+	return tgbotapi.NewInlineKeyboardMarkup(rows...)
 }
 
 func loadApps() *Apps {
