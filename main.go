@@ -30,11 +30,10 @@ func main() {
 	for update := range updates {
 		if update.CallbackQuery != nil {
 			go handleCallback(bot, update.CallbackQuery)
-		}
-		if update.Message == nil {
 			continue
 		}
-
-		go handleMessage(bot, update.Message)
+		if update.Message != nil {
+			go handleMessage(bot, update.Message)
+		}
 	}
 }

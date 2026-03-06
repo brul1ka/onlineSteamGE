@@ -13,7 +13,7 @@ import (
 	"github.com/robfig/cron/v3"
 )
 
-// FUNCTIONS FOR OPERATIONS WITH QUERY
+// FUNCTIONS FOR OPERATIONS WITH APP
 
 func searchAppByName(name string) (*AppItem, []string) {
 	mutex.RLock()
@@ -80,7 +80,20 @@ func filterAppsByQuery(query string, apps *Apps) []string {
 	return result
 }
 
-func createSuggestInlineKeyboard(suggestions []string) tgbotapi.InlineKeyboardMarkup {
+func findAppByID(id int) *AppItem {
+	mutex.RLock()
+	defer mutex.RUnlock()
+	for i := range apps {
+		if apps[i].AppID == id {
+			return &apps[i]
+		}
+	}
+	return nil
+}
+
+// FUNCTIONS FOR WORKING WITH INLINE KEYBOARD
+
+func createSuggestionsKeyboard(suggestions []string) tgbotapi.InlineKeyboardMarkup {
 	var rows [][]tgbotapi.InlineKeyboardButton
 	for _, name := range suggestions {
 		data := name
@@ -91,6 +104,13 @@ func createSuggestInlineKeyboard(suggestions []string) tgbotapi.InlineKeyboardMa
 		rows = append(rows, tgbotapi.NewInlineKeyboardRow(btn))
 	}
 	return tgbotapi.NewInlineKeyboardMarkup(rows...)
+}
+
+func createCheckAgainKeyboard(appID int) tgbotapi.InlineKeyboardMarkup {
+	callbackData := fmt.Sprintf("refresh_%d", appID)
+
+	btn := tgbotapi.NewInlineKeyboardButtonData("🔄 Check Again", callbackData)
+	return tgbotapi.NewInlineKeyboardMarkup(tgbotapi.NewInlineKeyboardRow(btn))
 }
 
 // APP LIST FUNCTIONS
