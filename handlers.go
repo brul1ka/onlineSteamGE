@@ -5,7 +5,6 @@ import (
 	"log"
 	"strconv"
 	"strings"
-	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
@@ -46,23 +45,25 @@ func handleCallback(bot *tgbotapi.BotAPI, cb *tgbotapi.CallbackQuery) {
 	var app *AppItem
 
 	bot.Request(tgbotapi.NewCallback(cb.ID, ""))
+
 	if strings.HasPrefix(data, "refresh_") {
 		idStr := strings.TrimPrefix(data, "refresh_")
 		id, _ := strconv.Atoi(idStr)
 		app = findAppByID(id)
 		if app != nil {
-			msgText = fmt.Sprintf("✅ Updated at %s\n%s", time.Now().Format("15:04:05"), getAppOnline(app))
+			msgText = getAppOnline(app)
 		} else {
 			msgText = "Game info lost. Please search again."
 		}
 	} else {
 		msgText, _, app = handleAppRequest(data)
 	}
-	msg := tgbotapi.NewMessage(cb.From.ID, msgText)
+
 	if app != nil {
-		keyboard := createCheckAgainKeyboard(app.AppID)
-		msg.ReplyMarkup = &keyboard
+		sendGameWithPhoto(bot, cb.Message.Chat.ID, app, msgText)
+		return
 	}
+	msg := tgbotapi.NewMessage(cb.Message.Chat.ID, msgText)
 	bot.Send(msg)
 }
 
@@ -96,22 +97,26 @@ func handleMessage(bot *tgbotapi.BotAPI, msg *tgbotapi.Message) {
 		return
 	}
 
-	msgTxt := msg.Text
 	chatID := msg.Chat.ID
-	userName := msg.From.UserName
-
 	if msg.Text == "" {
 		bot.Send(tgbotapi.NewMessage(chatID, "Not valid message!"))
+		return
 	}
 
-	log.Printf("[%s] %s", userName, msgTxt)
-	botMsgText, suggestions, foundApp := handleAppRequest(msgTxt)
-	botMsg := tgbotapi.NewMessage(chatID, botMsgText)
+	log.Printf("[%s] %s", msg.From.UserName, msg.Text)
+	botMsgText, suggestions, foundApp := handleAppRequest(msg.Text)
+
 	if foundApp != nil {
-		botMsg.ReplyMarkup = createCheckAgainKeyboard(foundApp.AppID)
-	} else if len(suggestions) > 0 {
-		botMsg.ReplyMarkup = createSuggestionsKeyboard(suggestions)
+		sendGameWithPhoto(bot, chatID, foundApp, botMsgText)
+		return
 	}
 
-	bot.Send(botMsg)
+	if len(suggestions) > 0 {
+		botMsg := tgbotapi.NewMessage(chatID, botMsgText)
+		botMsg.ReplyMarkup = createSuggestionsKeyboard(suggestions)
+		bot.Send(botMsg)
+		return
+	}
+
+	bot.Send(tgbotapi.NewMessage(chatID, botMsgText))
 }

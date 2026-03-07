@@ -91,6 +91,17 @@ func findAppByID(id int) *AppItem {
 	return nil
 }
 
+func sendGameWithPhoto(bot *tgbotapi.BotAPI, chatID int64, app *AppItem, text string) {
+	photoURL := fmt.Sprintf("https://cdn.akamai.steamstatic.com/steam/apps/%d/header.jpg", app.AppID)
+	photoMsg := tgbotapi.NewPhoto(chatID, tgbotapi.FileURL(photoURL))
+
+	photoMsg.Caption = text
+	keyboard := createCheckAgainKeyboard(app.AppID)
+	photoMsg.ReplyMarkup = keyboard
+
+	bot.Send(photoMsg)
+}
+
 // FUNCTIONS FOR WORKING WITH INLINE KEYBOARD
 
 func createSuggestionsKeyboard(suggestions []string) tgbotapi.InlineKeyboardMarkup {
