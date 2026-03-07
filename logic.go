@@ -41,7 +41,7 @@ func getAppOnline(app *AppItem) string {
 	url := fmt.Sprintf("https://api.steampowered.com/ISteamUserStats/GetNumberOfCurrentPlayers/v1/?appid=%d", app.AppID)
 	resp, err := http.Get(url)
 	if err != nil {
-		return "Error connecting to Steam API!"
+		return "<b>Error connecting to Steam API!</b>"
 	}
 	defer resp.Body.Close()
 
@@ -51,10 +51,10 @@ func getAppOnline(app *AppItem) string {
 	}
 
 	if data.Response.Result != 1 {
-		return "Failed to retrieve online!\nMaybe this game isn't released"
+		return "<b>Failed to retrieve online!</b>\nMaybe this game isn't released"
 	}
 
-	return fmt.Sprintf("📊 Now in game %s (appid: %d): %d people", app.Name, app.AppID, data.Response.PlayerCount)
+	return fmt.Sprintf("📊 Now in game <code>%s</code> (<code>%d</code>): %d people", app.Name, app.AppID, data.Response.PlayerCount)
 }
 
 func filterAppsByQuery(query string, apps *Apps) []string {
@@ -130,11 +130,13 @@ func sendGameWithPhoto(bot *tgbotapi.BotAPI, chatID int64, app *AppItem, text st
 		photoMsg = tgbotapi.NewPhoto(chatID, tgbotapi.FilePath(pathToPhoto))
 	} else {
 		msg := tgbotapi.NewMessage(chatID, text)
+		msg.ParseMode = "HTML"
 		msg.ReplyMarkup = createCheckAgainKeyboard(app.AppID)
 		bot.Send(msg)
 		return
 	}
 
+	photoMsg.ParseMode = "HTML"
 	photoMsg.Caption = text
 	photoMsg.ReplyMarkup = createCheckAgainKeyboard(app.AppID)
 
@@ -207,27 +209,37 @@ func getAppList() {
 		log.Printf("Failed to rename file: %v", err)
 		return
 	}
-	os.Rename("temp.json", "games_appid.json")
 
 	loaded := loadApps()
 	if loaded != nil {
 		mutex.Lock()
 		apps = *loaded
 		mutex.Unlock()
+		log.Printf("Successfully updated app list. Total games: %d. Bytes: %d", len(apps), bytesWritten)
+	} else {
+		log.Printf("Failed to load apps from the new JSON file")
 	}
-
-	log.Printf("Successfully got an app list. Bytes written: %d", bytesWritten)
 }
 
-func updateAppList() {
+func setupCron() {
 	c := cron.New()
 
 	_, err := c.AddFunc("0 3 * * *", getAppList)
 	if err != nil {
-		log.Printf("Failed to configure cron: %v", err)
-		return
+		log.Printf("Error scheduling JSON update: %v", err)
+	}
+
+	_, err = c.AddFunc("0 0 */7 * *", func() {
+		if err := os.RemoveAll("cache"); err != nil {
+			log.Printf("Error deleting cache: %v", err)
+			return
+		}
+		log.Printf("Cache cleared successfully.")
+	})
+	if err != nil {
+		log.Printf("Error scheduling cache clear: %v", err)
 	}
 
 	c.Start()
-	log.Print("cron started")
+	log.Print("Сron started")
 }

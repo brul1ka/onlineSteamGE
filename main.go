@@ -13,7 +13,6 @@ var (
 )
 
 func main() {
-
 	bot, err := tgbotapi.NewBotAPI(TOKEN)
 	if err != nil {
 		log.Fatal(err)
@@ -25,7 +24,7 @@ func main() {
 	updates := bot.GetUpdatesChan(u)
 
 	getAppList()
-	go updateAppList()
+	go setupCron()
 
 	for update := range updates {
 		if update.CallbackQuery != nil {

@@ -21,7 +21,7 @@ func handleAppRequest(name string) (string, []string, *AppItem) {
 		if len(suggestions) == 1 {
 			log.Printf("Auto-finding game: %s", suggestions[0])
 			autoGame, _ := searchAppByName(suggestions[0])
-			return fmt.Sprintf("🪄 Auto found!\n%s", getAppOnline(autoGame)), nil, autoGame
+			return fmt.Sprintf("🪄%s", getAppOnline(autoGame)), nil, autoGame
 		}
 		return "No game with this name! Maybe you meant:", suggestions, nil
 	}
@@ -65,6 +65,7 @@ func handleCallback(bot *tgbotapi.BotAPI, cb *tgbotapi.CallbackQuery) {
 		return
 	}
 	msg := tgbotapi.NewMessage(cb.Message.Chat.ID, msgText)
+	msg.ParseMode = "HTML"
 	bot.Send(msg)
 }
 
@@ -73,8 +74,7 @@ func handleCommand(bot *tgbotapi.BotAPI, msg *tgbotapi.Message) {
 
 	switch msg.Command() {
 	case "start":
-		text := `Hello! It's Online Steam, TG-bot to check online in Steam game!
-		Just type name of the game you wanna check.`
+		text := "Hello! It's Online Steam, TG-bot to check online in Steam game!\nJust type name of the game you wanna check."
 		bot.Send(tgbotapi.NewMessage(chatID, text))
 
 	case "find":
