@@ -19,6 +19,7 @@ func handleAppRequest(name string) (string, []string, *AppItem) {
 	}
 	if len(suggestions) > 0 {
 		if len(suggestions) == 1 {
+			log.Printf("Auto-finding game: %s", suggestions[0])
 			autoGame, _ := searchAppByName(suggestions[0])
 			return fmt.Sprintf("🪄 Auto found!\n%s", getAppOnline(autoGame)), nil, autoGame
 		}

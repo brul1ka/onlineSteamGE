@@ -129,8 +129,10 @@ func sendGameWithPhoto(bot *tgbotapi.BotAPI, chatID int64, app *AppItem, text st
 	if pathToPhoto != "" {
 		photoMsg = tgbotapi.NewPhoto(chatID, tgbotapi.FilePath(pathToPhoto))
 	} else {
-		url := fmt.Sprintf("https://cdn.akamai.steamstatic.com/steam/apps/%d/header.jpg", app.AppID)
-		photoMsg = tgbotapi.NewPhoto(chatID, tgbotapi.FileURL(url))
+		msg := tgbotapi.NewMessage(chatID, text)
+		msg.ReplyMarkup = createCheckAgainKeyboard(app.AppID)
+		bot.Send(msg)
+		return
 	}
 
 	photoMsg.Caption = text
