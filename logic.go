@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -91,13 +92,49 @@ func findAppByID(id int) *AppItem {
 	return nil
 }
 
+// PHOTO FUNCTIONS
+
+func getCachedPhotoPath(appID int) string {
+	cacheDir := "cache"
+	os.MkdirAll("cache", os.ModePerm)
+
+	name := fmt.Sprintf("%d.jpg", appID)
+	path := filepath.Join(cacheDir, name)
+
+	if _, err := os.Stat(path); err == nil {
+		return path
+	}
+
+	url := fmt.Sprintf("https://cdn.akamai.steamstatic.com/steam/apps/%d/header.jpg", appID)
+	resp, err := http.Get(url)
+	if err != nil || resp.StatusCode != http.StatusOK {
+		return ""
+	}
+	defer resp.Body.Close()
+
+	file, err := os.Create(path)
+	if err != nil {
+		return ""
+	}
+	defer file.Close()
+	io.Copy(file, resp.Body)
+
+	return path
+}
+
 func sendGameWithPhoto(bot *tgbotapi.BotAPI, chatID int64, app *AppItem, text string) {
-	photoURL := fmt.Sprintf("https://cdn.akamai.steamstatic.com/steam/apps/%d/header.jpg", app.AppID)
-	photoMsg := tgbotapi.NewPhoto(chatID, tgbotapi.FileURL(photoURL))
+	pathToPhoto := getCachedPhotoPath(app.AppID)
+	var photoMsg tgbotapi.PhotoConfig
+
+	if pathToPhoto != "" {
+		photoMsg = tgbotapi.NewPhoto(chatID, tgbotapi.FilePath(pathToPhoto))
+	} else {
+		url := fmt.Sprintf("https://cdn.akamai.steamstatic.com/steam/apps/%d/header.jpg", app.AppID)
+		photoMsg = tgbotapi.NewPhoto(chatID, tgbotapi.FileURL(url))
+	}
 
 	photoMsg.Caption = text
-	keyboard := createCheckAgainKeyboard(app.AppID)
-	photoMsg.ReplyMarkup = keyboard
+	photoMsg.ReplyMarkup = createCheckAgainKeyboard(app.AppID)
 
 	bot.Send(photoMsg)
 }
