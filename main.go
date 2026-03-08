@@ -2,9 +2,11 @@ package main
 
 import (
 	"log"
+	"os"
 	"sync"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"github.com/joho/godotenv"
 )
 
 var (
@@ -13,7 +15,12 @@ var (
 )
 
 func main() {
-	bot, err := tgbotapi.NewBotAPI(TOKEN)
+	godotenv.Load()
+	token := os.Getenv("ONLINESTEAMGE_BOT_TOKEN")
+	if token == "" {
+		log.Panic("Didn't find bot token in environment variable!")
+	}
+	bot, err := tgbotapi.NewBotAPI(token)
 	if err != nil {
 		log.Fatal(err)
 	}
