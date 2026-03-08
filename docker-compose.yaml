@@ -1,0 +1,9 @@
+services:
+  online-steam-ge:
+    image: brul1ka/online-steam-ge:latest
+    container_name: online-steam-ge
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./cache:/bot/cache

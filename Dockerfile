@@ -5,10 +5,9 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 
-ARG TARGETOS
 ARG TARGETARCH
 
-RUN GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o onlineSteamGE .
+RUN GOOS=linux GOARCH=$TARGETARCH go build -o onlineSteamGE .
 
 FROM alpine:latest
 WORKDIR /bot/
