@@ -229,7 +229,7 @@ func setupCron() {
 		log.Printf("Error scheduling JSON update: %v", err)
 	}
 
-	_, err = c.AddFunc("0 0 */7 * *", func() {
+	_, err = c.AddFunc("0 0 1 * *", func() {
 		if err := os.RemoveAll("cache"); err != nil {
 			log.Printf("Error deleting cache: %v", err)
 			return
