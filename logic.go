@@ -54,7 +54,7 @@ func getAppOnline(app *AppItem) string {
 		return "<b>Failed to retrieve online!</b>\nMaybe this game isn't released"
 	}
 
-	return fmt.Sprintf("📊 Now in game <code>%s</code> (<code>%d</code>): %d people", app.Name, app.AppID, data.Response.PlayerCount)
+	return fmt.Sprintf("📊 Now in game <code>%s</code> (<a href='https://steamdb.info/app/%d/charts/'>%d</a>): %d people", app.Name, app.AppID, app.AppID, data.Response.PlayerCount)
 }
 
 func filterAppsByQuery(query string, apps *Apps) []string {
@@ -229,16 +229,16 @@ func setupCron() {
 		log.Printf("Error scheduling JSON update: %v", err)
 	}
 
-	_, err = c.AddFunc("0 0 1 * *", func() {
-		if err := os.RemoveAll("cache"); err != nil {
-			log.Printf("Error deleting cache: %v", err)
-			return
-		}
-		log.Printf("Cache cleared successfully.")
-	})
-	if err != nil {
-		log.Printf("Error scheduling cache clear: %v", err)
-	}
+	//	_, err = c.AddFunc("0 0 1 * *", func() {
+	//		if err := os.RemoveAll("cache"); err != nil {
+	//			log.Printf("Error deleting cache: %v", err)
+	//			return
+	//		}
+	//		log.Printf("Cache cleared successfully.")
+	//	})
+	//	if err != nil {
+	//		log.Printf("Error scheduling cache clear: %v", err)
+	//	}
 
 	c.Start()
 	log.Print("Сron started")
