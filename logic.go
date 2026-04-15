@@ -16,16 +16,22 @@ import (
 
 // FUNCTIONS FOR OPERATIONS WITH APP
 
-func searchAppByName(name string) (*AppItem, []string) {
+func searchAppByName(name string) ([]*AppItem, []string) {
 	mutex.RLock()
 	defer mutex.RUnlock()
 	cleanName := strings.TrimSpace(name)
 
+	var exactMatches []*AppItem
 	for i := range apps {
 		if strings.EqualFold(strings.TrimSpace(apps[i].Name), cleanName) {
-			return &apps[i], nil
+			exactMatches = append(exactMatches, &apps[i])
 		}
 	}
+
+	if len(exactMatches) > 0 {
+		return exactMatches, nil
+	}
+
 	filtered := filterAppsByQuery(name, &apps)
 	return nil, filtered
 }
@@ -81,7 +87,7 @@ func filterAppsByQuery(query string, apps *Apps) []string {
 	return result
 }
 
-func findAppByID(id int) *AppItem {
+func searchAppByID(id int) *AppItem {
 	mutex.RLock()
 	defer mutex.RUnlock()
 	for i := range apps {
@@ -147,14 +153,34 @@ func sendGameWithPhoto(bot *tgbotapi.BotAPI, chatID int64, app *AppItem, text st
 
 func createSuggestionsKeyboard(suggestions []string) tgbotapi.InlineKeyboardMarkup {
 	var rows [][]tgbotapi.InlineKeyboardButton
+
+	var allMatches []*AppItem
+	seenIDs := make(map[int]bool)
+	nameCounts := make(map[string]int)
+
 	for _, name := range suggestions {
-		data := name
-		if len(data) > 64 {
-			data = data[:64]
+		matches, _ := searchAppByName(name)
+		for _, app := range matches {
+			if !seenIDs[app.AppID] {
+				allMatches = append(allMatches, app)
+				seenIDs[app.AppID] = true
+				nameCounts[app.Name]++
+			}
 		}
-		btn := tgbotapi.NewInlineKeyboardButtonData(name, data)
+	}
+
+	for _, app := range allMatches {
+		label := app.Name
+
+		if nameCounts[app.Name] > 1 {
+			label = fmt.Sprintf("%s (ID: %d)", app.Name, app.AppID)
+		}
+
+		data := fmt.Sprintf("id_%d", app.AppID)
+		btn := tgbotapi.NewInlineKeyboardButtonData(label, data)
 		rows = append(rows, tgbotapi.NewInlineKeyboardRow(btn))
 	}
+
 	return tgbotapi.NewInlineKeyboardMarkup(rows...)
 }
 
@@ -163,6 +189,18 @@ func createCheckAgainKeyboard(appID int) tgbotapi.InlineKeyboardMarkup {
 
 	btn := tgbotapi.NewInlineKeyboardButtonData("🔄 Check Again", callbackData)
 	return tgbotapi.NewInlineKeyboardMarkup(tgbotapi.NewInlineKeyboardRow(btn))
+}
+
+func createMatchesKeyboard(matches []*AppItem) tgbotapi.InlineKeyboardMarkup {
+	var rows [][]tgbotapi.InlineKeyboardButton
+	for _, app := range matches {
+		data := fmt.Sprintf("id_%d", app.AppID)
+
+		label := fmt.Sprintf("%s (ID: %d)", app.Name, app.AppID)
+		btn := tgbotapi.NewInlineKeyboardButtonData(label, data)
+		rows = append(rows, tgbotapi.NewInlineKeyboardRow(btn))
+	}
+	return tgbotapi.NewInlineKeyboardMarkup(rows...)
 }
 
 // APP LIST FUNCTIONS
