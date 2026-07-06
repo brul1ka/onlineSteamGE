@@ -35,6 +35,7 @@ func main() {
 
 	for update := range updates {
 		if update.CallbackQuery != nil {
+			log.Printf("[\"%s\" requested callback] %s", update.CallbackQuery.From.UserName, update.CallbackQuery.Data)
 			go handleCallback(bot, update.CallbackQuery)
 			continue
 		}
