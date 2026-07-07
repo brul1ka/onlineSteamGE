@@ -9,27 +9,43 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-func handleAppRequest(name string) (string, []string, []*AppItem) {
-	matches, suggestions := searchAppByName(name)
+func handleAppRequest(name string) (string, []string, []*App) {
+	matches, suggestions := getAppsByName(name)
 
 	if len(matches) > 0 {
 		if len(matches) == 1 {
-			return getAppOnline(matches[0]), nil, matches
+			return formatAppOnlineMessage(matches[0], false), nil, matches
 		}
 		return "Found several games with this name. Please choose:", nil, matches
 	}
 
 	if len(suggestions) > 0 {
+		if len(suggestions) == 1 {
+			app, _ := getAppsByName(suggestions[0])
+
+			// check that getAppsByName actually found something
+			// and returned exactly one game (in case there are no duplicates under that name)
+			if len(app) == 1 {
+				return formatAppOnlineMessage(app[0], true), nil, app
+			}
+
+			// If there are multiple apps hidden under this "single" name in the database,
+			// we can't show one card—we present them as exact matches,
+			// and the bot will build a MatchesKeyboard for them!
+			if len(app) > 1 {
+				return "Found several games with this name. Please choose:", nil, app
+			}
+		}
 		return "Game not found. Maybe you meant:", suggestions, nil
 	}
 	return "There is no such game with this name!", nil, nil
 }
 
-func handleSearchRequest(name string) (string, []string) {
+func handleForceFindRequest(name string) (string, []string) {
 	mutex.RLock()
 	defer mutex.RUnlock()
 
-	suggestions := filterAppsByQuery(name, &apps)
+	suggestions := fuzzySearchApps(name, &apps)
 
 	if len(suggestions) > 0 {
 		return fmt.Sprintf("🔍 Search results for '%s':", name), suggestions
@@ -57,10 +73,10 @@ func handleCallback(bot *tgbotapi.BotAPI, cb *tgbotapi.CallbackQuery) {
 			return
 		}
 
-		app := searchAppByID(id)
+		app := getAppByID(id)
 		if app != nil {
-			msgText := getAppOnline(app)
-			sendGameWithPhoto(bot, chatID, app, msgText)
+			msgText := formatAppOnlineMessage(app, false)
+			sendAppWithPhoto(bot, chatID, app, msgText)
 		} else {
 			msg := tgbotapi.NewMessage(chatID, "⚠️ Game info lost. Please search again.")
 			bot.Send(msg)
@@ -72,7 +88,7 @@ func handleCallback(bot *tgbotapi.BotAPI, cb *tgbotapi.CallbackQuery) {
 
 	if len(foundApps) > 0 {
 		if len(foundApps) == 1 {
-			sendGameWithPhoto(bot, chatID, foundApps[0], msgText)
+			sendAppWithPhoto(bot, chatID, foundApps[0], msgText)
 		} else {
 			reply := tgbotapi.NewMessage(chatID, msgText)
 			reply.ReplyMarkup = createMatchesKeyboard(foundApps)
@@ -109,7 +125,7 @@ func handleCommand(bot *tgbotapi.BotAPI, msg *tgbotapi.Message) {
 			bot.Send(tgbotapi.NewMessage(chatID, "Please enter game name after /find"))
 			return
 		}
-		msgText, suggestions := handleSearchRequest(query)
+		msgText, suggestions := handleForceFindRequest(query)
 		reply := tgbotapi.NewMessage(chatID, msgText)
 		if len(suggestions) > 0 {
 			reply.ReplyMarkup = createSuggestionsKeyboard(suggestions)
@@ -131,7 +147,7 @@ func handleMessage(bot *tgbotapi.BotAPI, msg *tgbotapi.Message) {
 
 	if len(foundApps) > 0 {
 		if len(foundApps) == 1 {
-			sendGameWithPhoto(bot, chatID, foundApps[0], botMsgText)
+			sendAppWithPhoto(bot, chatID, foundApps[0], botMsgText)
 		} else {
 			reply := tgbotapi.NewMessage(chatID, botMsgText)
 			reply.ReplyMarkup = createMatchesKeyboard(foundApps)

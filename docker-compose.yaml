@@ -1,6 +1,6 @@
 services:
   online-steam-ge:
-    image: brul1ka/online-steam-ge:latest
+    build: .
     container_name: online-steam-ge
     restart: unless-stopped
     env_file:

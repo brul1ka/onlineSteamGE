@@ -16,12 +16,12 @@ import (
 
 // FUNCTIONS FOR OPERATIONS WITH APP
 
-func searchAppByName(name string) ([]*AppItem, []string) {
+func getAppsByName(name string) ([]*App, []string) {
 	mutex.RLock()
 	defer mutex.RUnlock()
 	cleanName := strings.TrimSpace(name)
 
-	var exactMatches []*AppItem
+	var exactMatches []*App
 	for i := range apps {
 		if strings.EqualFold(strings.TrimSpace(apps[i].Name), cleanName) {
 			exactMatches = append(exactMatches, &apps[i])
@@ -32,11 +32,11 @@ func searchAppByName(name string) ([]*AppItem, []string) {
 		return exactMatches, nil
 	}
 
-	filtered := filterAppsByQuery(name, &apps)
+	filtered := fuzzySearchApps(name, &apps)
 	return nil, filtered
 }
 
-func getAppOnline(app *AppItem) string {
+func formatAppOnlineMessage(app *App, isSingleMatch bool) string {
 	if app == nil {
 		return "There is no such game with this name!"
 	}
@@ -60,10 +60,14 @@ func getAppOnline(app *AppItem) string {
 		return "<b>Failed to retrieve online!</b>\nMaybe this game isn't released"
 	}
 
-	return fmt.Sprintf("📊 Now in game <code>%s</code> (<a href='https://steamdb.info/app/%d/charts/'>%d</a>): %d people", app.Name, app.AppID, app.AppID, data.Response.PlayerCount)
+	successTxt := fmt.Sprintf("📊 Now in game <code>%s</code> (<a href='https://steamdb.info/app/%d/charts/'>%d</a>): %d people", app.Name, app.AppID, app.AppID, data.Response.PlayerCount)
+	if isSingleMatch {
+		successTxt = "🪄" + successTxt
+	}
+	return successTxt
 }
 
-func filterAppsByQuery(query string, apps *Apps) []string {
+func fuzzySearchApps(query string, apps *[]App) []string {
 	result := []string{}
 	queryWords := strings.Fields(strings.ToLower(query))
 
@@ -80,14 +84,16 @@ func filterAppsByQuery(query string, apps *Apps) []string {
 		if counter == len(queryWords) {
 			result = append(result, app.Name)
 		}
-		if len(result) >= 20 {
-			break
+
+		// get last 20 apps
+		if len(result) > 20 {
+			result = result[len(result)-20:]
 		}
 	}
 	return result
 }
 
-func searchAppByID(id int) *AppItem {
+func getAppByID(id int) *App {
 	mutex.RLock()
 	defer mutex.RUnlock()
 	for i := range apps {
@@ -123,12 +129,13 @@ func getCachedPhotoPath(appID int) string {
 		return ""
 	}
 	defer file.Close()
-	io.Copy(file, resp.Body)
+
+	io.Copy(file, resp.Body) // copy url's jpg to file
 
 	return path
 }
 
-func sendGameWithPhoto(bot *tgbotapi.BotAPI, chatID int64, app *AppItem, text string) {
+func sendAppWithPhoto(bot *tgbotapi.BotAPI, chatID int64, app *App, text string) {
 	pathToPhoto := getCachedPhotoPath(app.AppID)
 	var photoMsg tgbotapi.PhotoConfig
 
@@ -154,14 +161,14 @@ func sendGameWithPhoto(bot *tgbotapi.BotAPI, chatID int64, app *AppItem, text st
 func createSuggestionsKeyboard(suggestions []string) tgbotapi.InlineKeyboardMarkup {
 	var rows [][]tgbotapi.InlineKeyboardButton
 
-	var allMatches []*AppItem
+	var allMatches []*App
 	seenIDs := make(map[int]bool)
 	nameCounts := make(map[string]int)
 
 	for _, name := range suggestions {
-		matches, _ := searchAppByName(name)
+		matches, _ := getAppsByName(name) // search for info about an app by its name. by the way, it can return more than 1 app, so matches may be larger than suggestions
 		for _, app := range matches {
-			if !seenIDs[app.AppID] {
+			if !seenIDs[app.AppID] { // if we haven't processed this game yet
 				allMatches = append(allMatches, app)
 				seenIDs[app.AppID] = true
 				nameCounts[app.Name]++
@@ -172,6 +179,7 @@ func createSuggestionsKeyboard(suggestions []string) tgbotapi.InlineKeyboardMark
 	for _, app := range allMatches {
 		label := app.Name
 
+		// if there is more than one game with the same name - add the id on label
 		if nameCounts[app.Name] > 1 {
 			label = fmt.Sprintf("%s (ID: %d)", app.Name, app.AppID)
 		}
@@ -191,7 +199,9 @@ func createCheckAgainKeyboard(appID int) tgbotapi.InlineKeyboardMarkup {
 	return tgbotapi.NewInlineKeyboardMarkup(tgbotapi.NewInlineKeyboardRow(btn))
 }
 
-func createMatchesKeyboard(matches []*AppItem) tgbotapi.InlineKeyboardMarkup {
+// this is lightweight createSuggestionsKeyboard() because this func don't need to process slice of app names
+// it gets matches right away
+func createMatchesKeyboard(matches []*App) tgbotapi.InlineKeyboardMarkup {
 	var rows [][]tgbotapi.InlineKeyboardButton
 	for _, app := range matches {
 		data := fmt.Sprintf("id_%d", app.AppID)
@@ -205,14 +215,14 @@ func createMatchesKeyboard(matches []*AppItem) tgbotapi.InlineKeyboardMarkup {
 
 // APP LIST FUNCTIONS
 
-func loadApps() *Apps {
+func loadApps() *[]App {
 	file, err := os.Open("games_appid.json")
 	if err != nil {
 		return nil
 	}
 	defer file.Close()
 
-	var apps Apps
+	var apps []App
 	if err := json.NewDecoder(file).Decode(&apps); err != nil {
 		return &apps
 	}

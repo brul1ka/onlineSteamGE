@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	apps  Apps
+	apps  []App
 	mutex sync.RWMutex
 )
 
