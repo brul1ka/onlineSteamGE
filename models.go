@@ -7,11 +7,9 @@ type SteamResponse struct {
 	} `json:"response"`
 }
 
-type AppItem struct {
+type App struct {
 	AppID             int    `json:"appid"`
 	Name              string `json:"name"`
 	LastModified      int    `json:"last_modified"`
 	PriceChangeNumber int    `json:"price_change_number"`
 }
-
-type Apps []AppItem
