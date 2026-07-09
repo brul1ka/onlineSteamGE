@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -44,6 +45,7 @@ func formatAppOnlineMessage(app *App, isSingleMatch bool) string {
 		return "Not valid message"
 	}
 
+	// get number of online rn in app
 	url := fmt.Sprintf("https://api.steampowered.com/ISteamUserStats/GetNumberOfCurrentPlayers/v1/?appid=%d", app.AppID)
 	resp, err := http.Get(url)
 	if err != nil {
@@ -60,7 +62,32 @@ func formatAppOnlineMessage(app *App, isSingleMatch bool) string {
 		return "<b>Failed to retrieve online!</b>\nMaybe this game isn't released"
 	}
 
-	successTxt := fmt.Sprintf("📊 Now in game <code>%s</code> (<a href='https://steamdb.info/app/%d/charts/'>%d</a>): %d people", app.Name, app.AppID, app.AppID, data.Response.PlayerCount)
+	// end of getting online, now we getting release date
+	url = fmt.Sprintf("https://store.steampowered.com/api/appdetails?appids=%d", app.AppID)
+	resp, err = http.Get(url)
+	if err != nil {
+		return "<b>Error connecting to Steam API!</b>"
+	}
+	defer resp.Body.Close()
+
+	appIDStr := strconv.Itoa(app.AppID)
+	var result map[string]AppDetails
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "Error parsing response!"
+	}
+
+	data2, exists := result[appIDStr]
+	releaseDate := "Unknown"
+
+	if exists && data2.Success {
+		if data2.Data.ReleaseDate.ComingSoon {
+			releaseDate = "Coming soon..."
+		} else if data2.Data.ReleaseDate.Date != "" {
+			releaseDate = data2.Data.ReleaseDate.Date
+		}
+	}
+
+	successTxt := fmt.Sprintf("📊 Now in game <code>%s</code> (%s; ID: <a href='https://steamdb.info/app/%d/charts/'>%d</a>): %d people", app.Name, releaseDate, app.AppID, app.AppID, data.Response.PlayerCount)
 	if isSingleMatch {
 		successTxt = "🪄" + successTxt
 	}
@@ -135,25 +162,29 @@ func getCachedPhotoPath(appID int) string {
 	return path
 }
 
-func sendAppWithPhoto(bot *tgbotapi.BotAPI, chatID int64, app *App, text string) {
+func sendFinalMessage(bot *tgbotapi.BotAPI, chatID int64, app *App, text string) {
 	pathToPhoto := getCachedPhotoPath(app.AppID)
-	var photoMsg tgbotapi.PhotoConfig
+	keyboard := createCheckAgainKeyboard(app.AppID)
+
+	var msg tgbotapi.Chattable
 
 	if pathToPhoto != "" {
-		photoMsg = tgbotapi.NewPhoto(chatID, tgbotapi.FilePath(pathToPhoto))
+		photoMsg := tgbotapi.NewPhoto(chatID, tgbotapi.FilePath(pathToPhoto))
+		photoMsg.Caption = text
+		photoMsg.ParseMode = "HTML"
+		photoMsg.ReplyMarkup = keyboard
+		msg = photoMsg
 	} else {
-		msg := tgbotapi.NewMessage(chatID, text)
-		msg.ParseMode = "HTML"
-		msg.ReplyMarkup = createCheckAgainKeyboard(app.AppID)
-		bot.Send(msg)
-		return
+		textMsg := tgbotapi.NewMessage(chatID, text)
+		textMsg.ParseMode = "HTML"
+		textMsg.ReplyMarkup = keyboard
+		msg = textMsg
 	}
 
-	photoMsg.ParseMode = "HTML"
-	photoMsg.Caption = text
-	photoMsg.ReplyMarkup = createCheckAgainKeyboard(app.AppID)
-
-	bot.Send(photoMsg)
+	_, err := bot.Send(msg)
+	if err != nil {
+		log.Printf("Error sending final message for app %d: %v", app.AppID, err)
+	}
 }
 
 // FUNCTIONS FOR WORKING WITH INLINE KEYBOARD

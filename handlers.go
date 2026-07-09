@@ -76,10 +76,13 @@ func handleCallback(bot *tgbotapi.BotAPI, cb *tgbotapi.CallbackQuery) {
 		app := getAppByID(id)
 		if app != nil {
 			msgText := formatAppOnlineMessage(app, false)
-			sendAppWithPhoto(bot, chatID, app, msgText)
+			sendFinalMessage(bot, chatID, app, msgText)
 		} else {
 			msg := tgbotapi.NewMessage(chatID, "⚠️ Game info lost. Please search again.")
-			bot.Send(msg)
+			_, err := bot.Send(msg)
+			if err != nil {
+				log.Printf("Error sending game info lost message: %v", err)
+			}
 		}
 		return
 	}
@@ -88,7 +91,7 @@ func handleCallback(bot *tgbotapi.BotAPI, cb *tgbotapi.CallbackQuery) {
 
 	if len(foundApps) > 0 {
 		if len(foundApps) == 1 {
-			sendAppWithPhoto(bot, chatID, foundApps[0], msgText)
+			sendFinalMessage(bot, chatID, foundApps[0], msgText)
 		} else {
 			reply := tgbotapi.NewMessage(chatID, msgText)
 			reply.ReplyMarkup = createMatchesKeyboard(foundApps)
@@ -147,7 +150,7 @@ func handleMessage(bot *tgbotapi.BotAPI, msg *tgbotapi.Message) {
 
 	if len(foundApps) > 0 {
 		if len(foundApps) == 1 {
-			sendAppWithPhoto(bot, chatID, foundApps[0], botMsgText)
+			sendFinalMessage(bot, chatID, foundApps[0], botMsgText)
 		} else {
 			reply := tgbotapi.NewMessage(chatID, botMsgText)
 			reply.ReplyMarkup = createMatchesKeyboard(foundApps)
