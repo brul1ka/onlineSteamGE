@@ -59,11 +59,11 @@ func formatAppOnlineMessage(app *App, isSingleMatch bool) string {
 	}
 
 	if data.Response.Result != 1 {
-		return "<b>Failed to retrieve online!</b>\nMaybe this game isn't released"
+		return fmt.Sprintf("<b>Failed to retrieve online!</b>\nMaybe this game isn't released\n\nSteamDB page about this game is <a href='https://steamdb.info/app/%d/charts/'>here</a>", app.AppID)
 	}
 
 	// end of getting online, now we getting release date
-	url = fmt.Sprintf("https://store.steampowered.com/api/appdetails?appids=%d", app.AppID)
+	url = fmt.Sprintf("https://store.steampowered.com/api/appdetails?appids=%d&filters=release_date", app.AppID)
 	resp, err = http.Get(url)
 	if err != nil {
 		return "<b>Error connecting to Steam API!</b>"
