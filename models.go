@@ -1,5 +1,11 @@
 package main
 
+import (
+	"time"
+
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+)
+
 type SteamResponse struct {
 	Response struct {
 		PlayerCount int `json:"player_count"`
@@ -22,4 +28,37 @@ type AppDetails struct {
 			Date       string `json:"date"`
 		} `json:"release_date"`
 	} `json:"data"`
+}
+
+type AppHistoryDetails struct {
+	Time   time.Time
+	Online int
+}
+
+// commands available for all users
+var publicCommands []tgbotapi.BotCommand = []tgbotapi.BotCommand{
+	{
+		Command:     "start",
+		Description: "start bot and get greetings",
+	},
+	{
+		Command:     "find",
+		Description: "force find games containing this substring",
+	},
+}
+
+// commands for admins
+var adminCommands []tgbotapi.BotCommand = []tgbotapi.BotCommand{
+	{
+		Command:     "start",
+		Description: "start bot and get greetings",
+	},
+	{
+		Command:     "find",
+		Description: "force find games containing this substring",
+	},
+	{
+		Command:     "broadcast",
+		Description: "send message to all bot users",
+	},
 }

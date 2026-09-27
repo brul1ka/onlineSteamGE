@@ -7,3 +7,4 @@ services:
       - .env
     volumes:
       - ./cache:/bot/cache
+      - ./chats.db:/bot/chats.db

@@ -118,6 +118,7 @@ func handleCommand(bot *tgbotapi.BotAPI, msg *tgbotapi.Message) {
 	chatID := msg.Chat.ID
 
 	switch msg.Command() {
+	// all users
 	case "start":
 		text := "Hello! It's Online Steam, TG-bot to check online in Steam game!\nJust type name of the game you wanna check."
 		bot.Send(tgbotapi.NewMessage(chatID, text))
@@ -134,17 +135,57 @@ func handleCommand(bot *tgbotapi.BotAPI, msg *tgbotapi.Message) {
 			reply.ReplyMarkup = createSuggestionsKeyboard(suggestions)
 		}
 		bot.Send(reply)
+
+	// admin
+	case "broadcast":
+		text := msg.CommandArguments()
+
+		query := `SELECT chat_id FROM chats`
+		rows, err := db.Query(query)
+		if err != nil {
+			log.Printf("error getting chats from db: %v\n", err)
+		}
+		defer rows.Close()
+
+		var chats []int64
+
+		for rows.Next() {
+			var c int64
+			err := rows.Scan(
+				&c,
+			)
+			if err != nil {
+				log.Println("Error reading line:", err)
+				continue
+			}
+
+			chats = append(chats, c)
+		}
+		if err := rows.Err(); err != nil {
+			log.Printf("Error reading db: %v", err)
+		}
+
+		for _, chatID := range chats {
+			message := tgbotapi.NewMessage(chatID, text)
+			bot.Send(message)
+		}
 	}
 }
 
 func handleMessage(bot *tgbotapi.BotAPI, msg *tgbotapi.Message) {
+	chatID := msg.Chat.ID
+	log.Printf("[%s] %s", msg.From.UserName, msg.Text)
+
+	query := `INSERT OR IGNORE INTO chats (chat_id) VALUES (?);`
+	_, err := db.Exec(query, chatID)
+	if err != nil {
+		log.Printf("Error saving chat %d into database: %v", chatID, err)
+	}
+
 	if msg.IsCommand() {
 		handleCommand(bot, msg)
 		return
 	}
-
-	chatID := msg.Chat.ID
-	log.Printf("[%s] %s", msg.From.UserName, msg.Text)
 
 	botMsgText, suggestions, foundApps := handleAppRequest(msg.Text)
 

@@ -1,3 +1,5 @@
 .env
 games_appid.json
 cache
+users.db
+db

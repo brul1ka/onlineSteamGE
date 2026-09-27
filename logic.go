@@ -41,7 +41,7 @@ func formatAppOnlineMessage(app *App, isSingleMatch bool) string {
 	if app == nil {
 		return "There is no such game with this name!"
 	}
-	if app.Name == "" {
+	if app.Name == "" || app.Name == " " {
 		return "Not valid message"
 	}
 
@@ -160,31 +160,6 @@ func getCachedPhotoPath(appID int) string {
 	io.Copy(file, resp.Body) // copy url's jpg to file
 
 	return path
-}
-
-func sendFinalMessage(bot *tgbotapi.BotAPI, chatID int64, app *App, text string) {
-	pathToPhoto := getCachedPhotoPath(app.AppID)
-	keyboard := createCheckAgainKeyboard(app.AppID)
-
-	var msg tgbotapi.Chattable
-
-	if pathToPhoto != "" {
-		photoMsg := tgbotapi.NewPhoto(chatID, tgbotapi.FilePath(pathToPhoto))
-		photoMsg.Caption = text
-		photoMsg.ParseMode = "HTML"
-		photoMsg.ReplyMarkup = keyboard
-		msg = photoMsg
-	} else {
-		textMsg := tgbotapi.NewMessage(chatID, text)
-		textMsg.ParseMode = "HTML"
-		textMsg.ReplyMarkup = keyboard
-		msg = textMsg
-	}
-
-	_, err := bot.Send(msg)
-	if err != nil {
-		log.Printf("Error sending final message for app %d: %v", app.AppID, err)
-	}
 }
 
 // FUNCTIONS FOR WORKING WITH INLINE KEYBOARD
@@ -321,4 +296,31 @@ func setupCron() {
 
 	c.Start()
 	log.Print("Сron started")
+}
+
+// SENDING MESSAGE FUNCTIONS
+
+func sendFinalMessage(bot *tgbotapi.BotAPI, chatID int64, app *App, text string) {
+	pathToPhoto := getCachedPhotoPath(app.AppID)
+	keyboard := createCheckAgainKeyboard(app.AppID)
+
+	var msg tgbotapi.Chattable
+
+	if pathToPhoto != "" {
+		photoMsg := tgbotapi.NewPhoto(chatID, tgbotapi.FilePath(pathToPhoto))
+		photoMsg.Caption = text
+		photoMsg.ParseMode = "HTML"
+		photoMsg.ReplyMarkup = keyboard
+		msg = photoMsg
+	} else {
+		textMsg := tgbotapi.NewMessage(chatID, text)
+		textMsg.ParseMode = "HTML"
+		textMsg.ReplyMarkup = keyboard
+		msg = textMsg
+	}
+
+	_, err := bot.Send(msg)
+	if err != nil {
+		log.Printf("Error sending final message for app %d: %v", app.AppID, err)
+	}
 }
