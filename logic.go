@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -77,7 +78,7 @@ func formatAppOnlineMessage(app *App, isSingleMatch bool) string {
 	}
 
 	data2, exists := result[appIDStr]
-	releaseDate := "Unknown"
+	releaseDate := "Release date is unknown"
 
 	if exists && data2.Success {
 		if data2.Data.ReleaseDate.ComingSoon {
@@ -87,9 +88,38 @@ func formatAppOnlineMessage(app *App, isSingleMatch bool) string {
 		}
 	}
 
-	successTxt := fmt.Sprintf("📊 Now in game <code>%s</code> (%s; ID: <a href='https://steamdb.info/app/%d/charts/'>%d</a>): %d people", app.Name, releaseDate, app.AppID, app.AppID, data.Response.PlayerCount)
+	online_count := data.Response.PlayerCount
+	query1 := `INSERT INTO game_stats (app_id, online_count) VALUES (?, ?);`
+	_, err = db.Exec(query1, app.AppID, online_count)
+	if err != nil {
+		log.Printf("[ERROR] failed to insert game online stats into database: %v", err)
+	}
+
+	query2 := `SELECT app_id, online_count, checked_at 
+			FROM game_stats 
+			WHERE app_id = ?
+			AND checked_at >= datetime('now', '-1 day', '-1 hour')
+			AND checked_at <= datetime('now', '-1 day', '+1 hour')
+			ORDER BY checked_at DESC;
+			`
+	var gamestat GameStat
+	err = db.QueryRow(query2, app.AppID).Scan(&gamestat.AppID, &gamestat.OnlineCount, &gamestat.CheckedAt)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+
+		} else {
+			log.Printf("[ERROR] failed to get app online yesterday: %v", err)
+		}
+	}
+	successTxt := fmt.Sprintf("\n📊 Now in game <code>%s</code> (%s; ID: <a href='https://steamdb.info/app/%d/charts/'>%d</a>): %d people\n", app.Name, releaseDate, app.AppID, app.AppID, online_count)
 	if isSingleMatch {
 		successTxt = "🪄" + successTxt
+	}
+	if gamestat.AppID != 0 {
+		t := gamestat.CheckedAt.Format("06/01/02 15:04:05")
+		yesterday := fmt.Sprintf("❗️Yesterday, at approximately this time (UTC+00:00 %s), the online for this game was %d people.", t, gamestat.OnlineCount)
+		successTxt = successTxt + yesterday
 	}
 	return successTxt
 }
@@ -205,7 +235,8 @@ func createCheckAgainKeyboard(appID int) tgbotapi.InlineKeyboardMarkup {
 	return tgbotapi.NewInlineKeyboardMarkup(tgbotapi.NewInlineKeyboardRow(btn))
 }
 
-// this is lightweight createSuggestionsKeyboard() because this func don't need to process slice of app names
+// this is lightweight createSuggestionsKeyboard() because
+// this func don't need to process slice of app names to calculate suggestion list.
 // it gets matches right away
 func createMatchesKeyboard(matches []*App) tgbotapi.InlineKeyboardMarkup {
 	var rows [][]tgbotapi.InlineKeyboardButton
@@ -239,28 +270,28 @@ func getAppList() {
 	url := "https://raw.githubusercontent.com/jsnli/steamappidlist/refs/heads/master/data/games_appid.json"
 	resp, err := http.Get(url)
 	if err != nil {
-		log.Printf("Failed to get app list: %v", err)
+		log.Printf("[ERROR] failed to get app list: %v", err)
 		return
 	}
 	defer resp.Body.Close()
 
 	file, err := os.Create("temp.json")
 	if err != nil {
-		log.Printf("Failed to create game list file: %v", err)
+		log.Printf("[ERROR] failed to create app list file: %v", err)
 		return
 	}
 
 	bytesWritten, err := io.Copy(file, resp.Body)
 	if err != nil {
 		file.Close()
-		log.Printf("Failed to copy stream to file: %v", err)
+		log.Printf("[ERROR] failed to copy app list stream to file: %v", err)
 		return
 	}
 	file.Close()
 
 	err = os.Rename("temp.json", "games_appid.json")
 	if err != nil {
-		log.Printf("Failed to rename file: %v", err)
+		log.Printf("[ERROR] failed to rename app list file: %v", err)
 		return
 	}
 
@@ -269,9 +300,9 @@ func getAppList() {
 		mutex.Lock()
 		apps = *loaded
 		mutex.Unlock()
-		log.Printf("Successfully updated app list. Total games: %d. Bytes: %d", len(apps), bytesWritten)
+		log.Printf("[SUCCESS] successfully updated app list. total games: %d. bytes: %d", len(apps), bytesWritten)
 	} else {
-		log.Printf("Failed to load apps from the new JSON file")
+		log.Printf("[ERROR] failed to load apps from the new JSON file")
 	}
 }
 
@@ -280,22 +311,22 @@ func setupCron() {
 
 	_, err := c.AddFunc("0 3 * * *", getAppList)
 	if err != nil {
-		log.Printf("Error scheduling JSON update: %v", err)
+		log.Printf("[ERROR] failed to schedule getting fresh app list JSON: %v", err)
 	}
 
 	//	_, err = c.AddFunc("0 0 1 * *", func() {
 	//		if err := os.RemoveAll("cache"); err != nil {
-	//			log.Printf("Error deleting cache: %v", err)
+	//			log.Printf("[ERROR] failed to delete cache: %v", err)
 	//			return
 	//		}
-	//		log.Printf("Cache cleared successfully.")
+	//		log.Printf("[SUCCESS] cache cleared successfully")
 	//	})
 	//	if err != nil {
-	//		log.Printf("Error scheduling cache clear: %v", err)
+	//		log.Printf("[ERROR] failed to schedule cache clearing: %v", err)
 	//	}
 
 	c.Start()
-	log.Print("Сron started")
+	log.Print("[SUCCESS] cron started")
 }
 
 // SENDING MESSAGE FUNCTIONS
@@ -321,6 +352,6 @@ func sendFinalMessage(bot *tgbotapi.BotAPI, chatID int64, app *App, text string)
 
 	_, err := bot.Send(msg)
 	if err != nil {
-		log.Printf("Error sending final message for app %d: %v", app.AppID, err)
+		log.Printf("[ERROR] failed to send final message for app %d: %v", app.AppID, err)
 	}
 }

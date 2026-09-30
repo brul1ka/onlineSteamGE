@@ -69,7 +69,7 @@ func handleCallback(bot *tgbotapi.BotAPI, cb *tgbotapi.CallbackQuery) {
 
 		id, err := strconv.Atoi(idStr)
 		if err != nil {
-			log.Printf("Error converting ID: %v", err)
+			log.Printf("[ERROR] failed to convert appid in callback data from str to int: %v", err)
 			return
 		}
 
@@ -81,7 +81,7 @@ func handleCallback(bot *tgbotapi.BotAPI, cb *tgbotapi.CallbackQuery) {
 			msg := tgbotapi.NewMessage(chatID, "⚠️ Game info lost. Please search again.")
 			_, err := bot.Send(msg)
 			if err != nil {
-				log.Printf("Error sending game info lost message: %v", err)
+				log.Printf("[ERROR] failed to send game-info-lost message: %v", err)
 			}
 		}
 		return
@@ -140,14 +140,14 @@ func handleCommand(bot *tgbotapi.BotAPI, msg *tgbotapi.Message) {
 	case "broadcast":
 		text := msg.CommandArguments()
 
-		query := `SELECT chat_id FROM chats`
+		query := `SELECT chat_id FROM chat_ids`
 		rows, err := db.Query(query)
 		if err != nil {
-			log.Printf("error getting chats from db: %v\n", err)
+			log.Printf("[ERROR] failed to get chat ids from db to broadcast: %v\n", err)
 		}
 		defer rows.Close()
 
-		var chats []int64
+		var chatIDs []int64
 
 		for rows.Next() {
 			var c int64
@@ -155,17 +155,17 @@ func handleCommand(bot *tgbotapi.BotAPI, msg *tgbotapi.Message) {
 				&c,
 			)
 			if err != nil {
-				log.Println("Error reading line:", err)
+				log.Println("[ERROR] failed to read line while reading database:", err)
 				continue
 			}
 
-			chats = append(chats, c)
+			chatIDs = append(chatIDs, c)
 		}
 		if err := rows.Err(); err != nil {
-			log.Printf("Error reading db: %v", err)
+			log.Printf("[ERROR] failed to read database: %v", err)
 		}
 
-		for _, chatID := range chats {
+		for _, chatID := range chatIDs {
 			message := tgbotapi.NewMessage(chatID, text)
 			bot.Send(message)
 		}
@@ -176,10 +176,10 @@ func handleMessage(bot *tgbotapi.BotAPI, msg *tgbotapi.Message) {
 	chatID := msg.Chat.ID
 	log.Printf("[%s] %s", msg.From.UserName, msg.Text)
 
-	query := `INSERT OR IGNORE INTO chats (chat_id) VALUES (?);`
+	query := `INSERT OR IGNORE INTO chat_ids (chat_id) VALUES (?);`
 	_, err := db.Exec(query, chatID)
 	if err != nil {
-		log.Printf("Error saving chat %d into database: %v", chatID, err)
+		log.Printf("[ERROR] failed to save chat_id %d to database: %v", chatID, err)
 	}
 
 	if msg.IsCommand() {

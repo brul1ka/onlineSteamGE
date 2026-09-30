@@ -30,9 +30,10 @@ type AppDetails struct {
 	} `json:"data"`
 }
 
-type AppHistoryDetails struct {
-	Time   time.Time
-	Online int
+type GameStat struct {
+	AppID       int
+	OnlineCount int
+	CheckedAt   time.Time
 }
 
 // commands available for all users
