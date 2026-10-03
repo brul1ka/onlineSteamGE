@@ -46,20 +46,18 @@ var publicCommands []tgbotapi.BotCommand = []tgbotapi.BotCommand{
 		Command:     "find",
 		Description: "force find games containing this substring",
 	},
+	{
+		Command:     "set_timezone",
+		Description: "Set timezone (format: +HH:MM or -HH:MM)",
+	},
 }
 
 // commands for admins
-var adminCommands []tgbotapi.BotCommand = []tgbotapi.BotCommand{
-	{
-		Command:     "start",
-		Description: "start bot and get greetings",
-	},
-	{
-		Command:     "find",
-		Description: "force find games containing this substring",
-	},
-	{
+var adminCommands = append(
+	// append public commands to empty list and then to this new public commands list append admin commands
+	append([]tgbotapi.BotCommand{}, publicCommands...),
+	tgbotapi.BotCommand{
 		Command:     "broadcast",
-		Description: "send message to all bot users",
+		Description: "ADMIN: send message to all bot users",
 	},
-}
+)

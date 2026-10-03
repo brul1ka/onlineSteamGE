@@ -9,12 +9,12 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-func handleAppRequest(name string) (string, []string, []*App) {
+func handleAppRequest(name string, userID int64) (string, []string, []*App) {
 	matches, suggestions := getAppsByName(name)
 
 	if len(matches) > 0 {
 		if len(matches) == 1 {
-			return formatAppOnlineMessage(matches[0], false), nil, matches
+			return formatAppOnlineMessage(matches[0], false, userID), nil, matches
 		}
 		return "Found several games with this name. Please choose:", nil, matches
 	}
@@ -26,7 +26,7 @@ func handleAppRequest(name string) (string, []string, []*App) {
 			// check that getAppsByName actually found something
 			// and returned exactly one game (in case there are no duplicates under that name)
 			if len(app) == 1 {
-				return formatAppOnlineMessage(app[0], true), nil, app
+				return formatAppOnlineMessage(app[0], true, userID), nil, app
 			}
 
 			// If there are multiple apps hidden under this "single" name in the database,
@@ -54,6 +54,7 @@ func handleForceFindRequest(name string) (string, []string) {
 }
 
 func handleCallback(bot *tgbotapi.BotAPI, cb *tgbotapi.CallbackQuery) {
+
 	data := cb.Data
 	chatID := cb.Message.Chat.ID
 
@@ -75,7 +76,7 @@ func handleCallback(bot *tgbotapi.BotAPI, cb *tgbotapi.CallbackQuery) {
 
 		app := getAppByID(id)
 		if app != nil {
-			msgText := formatAppOnlineMessage(app, false)
+			msgText := formatAppOnlineMessage(app, false, cb.From.ID)
 			sendFinalMessage(bot, chatID, app, msgText)
 		} else {
 			msg := tgbotapi.NewMessage(chatID, "⚠️ Game info lost. Please search again.")
@@ -87,7 +88,7 @@ func handleCallback(bot *tgbotapi.BotAPI, cb *tgbotapi.CallbackQuery) {
 		return
 	}
 
-	msgText, suggestions, foundApps := handleAppRequest(data)
+	msgText, suggestions, foundApps := handleAppRequest(data, int64(cb.From.ID))
 
 	if len(foundApps) > 0 {
 		if len(foundApps) == 1 {
@@ -136,6 +137,31 @@ func handleCommand(bot *tgbotapi.BotAPI, msg *tgbotapi.Message) {
 		}
 		bot.Send(reply)
 
+	case "set_timezone":
+		userTimezone := msg.CommandArguments()
+		isValidTimezone, _ := isValidTimeZone(userTimezone)
+		if isValidTimezone {
+			query := `UPDATE user_settings
+					  SET timezone = ?
+					  where user_id = ?;`
+
+			_, err := db.Exec(query, userTimezone, msg.From.ID)
+			log.Println(msg.From.ID)
+			if err != nil {
+				log.Printf("[ERROR] failed to set user timezone: %v", err)
+				reply := tgbotapi.NewMessage(chatID, "Sorry, we can't set timezone due internal issues.")
+				bot.Send(reply)
+			}
+			log.Printf("[SUCCESS] set timezone %s for user %d successfully", userTimezone, msg.From.ID)
+			reply := tgbotapi.NewMessage(chatID, "Time zone set successfully!")
+			bot.Send(reply)
+			return
+		}
+
+		reply := tgbotapi.NewMessage(chatID, "<b>Invalid command syntax.</b>\nUse the format: [+-]HH:MM (e.g., +03:00).")
+		reply.ParseMode = "HTML"
+		bot.Send(reply)
+
 	// admin
 	case "broadcast":
 		text := msg.CommandArguments()
@@ -143,7 +169,7 @@ func handleCommand(bot *tgbotapi.BotAPI, msg *tgbotapi.Message) {
 		query := `SELECT chat_id FROM chat_ids`
 		rows, err := db.Query(query)
 		if err != nil {
-			log.Printf("[ERROR] failed to get chat ids from db to broadcast: %v\n", err)
+			log.Printf("[ERROR] failed to get chat ids from db to broadcast: %v", err)
 		}
 		defer rows.Close()
 
@@ -174,10 +200,14 @@ func handleCommand(bot *tgbotapi.BotAPI, msg *tgbotapi.Message) {
 
 func handleMessage(bot *tgbotapi.BotAPI, msg *tgbotapi.Message) {
 	chatID := msg.Chat.ID
+	userID := msg.From.ID
 	log.Printf("[%s] %s", msg.From.UserName, msg.Text)
 
-	query := `INSERT OR IGNORE INTO chat_ids (chat_id) VALUES (?);`
-	_, err := db.Exec(query, chatID)
+	schema := `INSERT OR IGNORE INTO chat_ids (chat_id) VALUES (?);
+	
+			   INSERT OR IGNORE INTO user_settings (user_id) VALUES (?);`
+
+	_, err := db.Exec(schema, chatID, userID)
 	if err != nil {
 		log.Printf("[ERROR] failed to save chat_id %d to database: %v", chatID, err)
 	}
@@ -187,7 +217,7 @@ func handleMessage(bot *tgbotapi.BotAPI, msg *tgbotapi.Message) {
 		return
 	}
 
-	botMsgText, suggestions, foundApps := handleAppRequest(msg.Text)
+	botMsgText, suggestions, foundApps := handleAppRequest(msg.Text, userID)
 
 	if len(foundApps) > 0 {
 		if len(foundApps) == 1 {

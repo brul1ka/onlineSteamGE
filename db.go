@@ -37,8 +37,7 @@ func initDB() {
 
 	schema := `
 		CREATE TABLE IF NOT EXISTS chat_ids (
-			id INTEGER PRIMARY KEY,
-			chat_id INTEGER NOT NULL
+			chat_id INTEGER PRIMARY KEY NOT NULL
 		);
 
 		CREATE TABLE IF NOT EXISTS game_stats (
@@ -46,6 +45,11 @@ func initDB() {
 			app_id INTEGER NOT NULL,
 			online_count INTEGER NOT NULL,
 			checked_at DATETIME DEFAULT (datetime('now')) NOT NULL
+		);
+
+		CREATE TABLE IF NOT EXISTS user_settings (
+			user_id INTEGER PRIMARY KEY,
+			timezone TEXT DEFAULT +0
 		);
 		`
 

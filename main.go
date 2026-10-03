@@ -57,7 +57,7 @@ func main() {
 	if err != nil {
 		log.Printf("[ERROR] failed to set admin command menu: %v", err)
 	} else {
-		log.Println("[SUCCESS] command menus setted successfully")
+		log.Println("[SUCCESS] command menus set successfully")
 	}
 
 	for update := range updates {

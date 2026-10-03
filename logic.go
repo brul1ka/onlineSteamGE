@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/robfig/cron/v3"
@@ -38,7 +39,7 @@ func getAppsByName(name string) ([]*App, []string) {
 	return nil, filtered
 }
 
-func formatAppOnlineMessage(app *App, isSingleMatch bool) string {
+func formatAppOnlineMessage(app *App, isSingleMatch bool, userID int64) string {
 	if app == nil {
 		return "There is no such game with this name!"
 	}
@@ -116,9 +117,24 @@ func formatAppOnlineMessage(app *App, isSingleMatch bool) string {
 	if isSingleMatch {
 		successTxt = "🪄" + successTxt
 	}
+
 	if gamestat.AppID != 0 {
+		query3 := `SELECT timezone FROM user_settings 
+				   WHERE user_id = ?;`
+
+		var timezone string
+		err := db.QueryRow(query3, userID).Scan(&timezone)
+		if err != nil {
+			log.Printf("[ERROR] failed to apply timezone for text message: %v", err)
+		}
+
+		ok, loc := isValidTimeZone(timezone)
 		t := gamestat.CheckedAt.Format("06/01/02 15:04:05")
-		yesterday := fmt.Sprintf("❗️Yesterday, at approximately this time (UTC+00:00 %s), the online for this game was %d people.", t, gamestat.OnlineCount)
+		if ok {
+			t = gamestat.CheckedAt.In(loc).Format("06/01/02 15:04:05")
+		}
+
+		yesterday := fmt.Sprintf("❗️Yesterday, at approximately this time (%s), the online for this game was %d people.", t, gamestat.OnlineCount)
 		successTxt = successTxt + yesterday
 	}
 	return successTxt
@@ -306,6 +322,8 @@ func getAppList() {
 	}
 }
 
+// TIME FUNCTIONS
+
 func setupCron() {
 	c := cron.New()
 
@@ -327,6 +345,18 @@ func setupCron() {
 
 	c.Start()
 	log.Print("[SUCCESS] cron started")
+}
+
+func isValidTimeZone(input string) (bool, *time.Location) {
+	layout := "-07:00"
+
+	t, err := time.Parse(layout, input)
+	if err != nil {
+		return false, nil
+	}
+
+	// t.Location() извлекает сдвиг в виде *time.Location (например, UTC+3)
+	return true, t.Location()
 }
 
 // SENDING MESSAGE FUNCTIONS
