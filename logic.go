@@ -266,6 +266,25 @@ func createMatchesKeyboard(matches []*App) tgbotapi.InlineKeyboardMarkup {
 	return tgbotapi.NewInlineKeyboardMarkup(rows...)
 }
 
+func setupCommandMenus(bot *tgbotapi.BotAPI, adminChatID int64) {
+	publicScope := tgbotapi.NewBotCommandScopeDefault()
+	adminScope := tgbotapi.NewBotCommandScopeChat(int64(adminChatID))
+
+	setPublicCommands := tgbotapi.NewSetMyCommandsWithScope(publicScope, publicCommands...)
+	_, err := bot.Request(setPublicCommands)
+	if err != nil {
+		log.Printf("[ERROR] failed to set public command menu: %v", err)
+	}
+
+	setAdminCommands := tgbotapi.NewSetMyCommandsWithScope(adminScope, adminCommands...)
+	_, err = bot.Request(setAdminCommands)
+	if err != nil {
+		log.Printf("[ERROR] failed to set admin command menu: %v", err)
+	} else {
+		log.Println("[SUCCESS] command menus set successfully")
+	}
+}
+
 // APP LIST FUNCTIONS
 
 func loadApps() *[]App {

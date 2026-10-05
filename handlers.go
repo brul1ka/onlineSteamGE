@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
 	"strconv"
 	"strings"
 
@@ -165,6 +166,16 @@ func handleCommand(bot *tgbotapi.BotAPI, msg *tgbotapi.Message) {
 	// admin
 	case "broadcast":
 		text := msg.CommandArguments()
+
+		adminChatIDstr := os.Getenv("ADMIN_CHAT_ID")
+		adminChatID, err := strconv.Atoi(adminChatIDstr)
+		if err != nil {
+			log.Fatalf("[FATAL] cant convert admin chat id from str to int: %v", err)
+		}
+
+		if chatID != int64(adminChatID) {
+			return
+		}
 
 		query := `SELECT chat_id FROM chat_ids`
 		rows, err := db.Query(query)

@@ -44,21 +44,7 @@ func main() {
 	getAppList()
 	go setupCron()
 
-	publicScope := tgbotapi.NewBotCommandScopeDefault()
-	setPublicCommands := tgbotapi.NewSetMyCommandsWithScope(publicScope, publicCommands...)
-	_, err = bot.Request(setPublicCommands)
-	if err != nil {
-		log.Printf("[ERROR] failed to set public command menu: %v", err)
-	}
-
-	adminScope := tgbotapi.NewBotCommandScopeChat(int64(adminChatID))
-	setAdminCommands := tgbotapi.NewSetMyCommandsWithScope(adminScope, adminCommands...)
-	_, err = bot.Request(setAdminCommands)
-	if err != nil {
-		log.Printf("[ERROR] failed to set admin command menu: %v", err)
-	} else {
-		log.Println("[SUCCESS] command menus set successfully")
-	}
+	setupCommandMenus(bot, int64(adminChatID))
 
 	for update := range updates {
 		if update.CallbackQuery != nil {
