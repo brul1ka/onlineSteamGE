@@ -11,9 +11,9 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-var ctx context.Context = context.Background()
-
 func handleAppRequest(name string, userID int64) (string, []string, []*App) {
+	ctx := context.TODO()
+
 	matches, suggestions := getAppsByName(name)
 
 	if len(matches) > 0 {
@@ -58,6 +58,7 @@ func handleForceFindRequest(name string) (string, []string) {
 }
 
 func handleCallback(bot *tgbotapi.BotAPI, cb *tgbotapi.CallbackQuery) {
+	ctx := context.TODO()
 
 	data := cb.Data
 	chatID := cb.Message.Chat.ID

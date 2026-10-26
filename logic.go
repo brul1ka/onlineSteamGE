@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -48,19 +49,29 @@ func formatAppOnlineMessage(ctx context.Context, app *App, isSingleMatch bool, u
 		return "Not valid message"
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, 6*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	// get number of online rn in app
 	url := fmt.Sprintf("https://api.steampowered.com/ISteamUserStats/GetNumberOfCurrentPlayers/v1/?appid=%d", app.AppID)
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
+		log.Printf("[ERROR] failed to create request with context to get online right now to url \"%s\": %v", url, err)
+	}
+
+	resp1, err := http.DefaultClient.Do(req)
+	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			log.Println("[CONTEXT WARN] timeout in formating message")
+			return "<b>Error: Operation timed out. Steam API is taking too long to respond. Please try again.</b>"
+		}
+		log.Printf("[ERROR] something went wrong executing the request for \"%s\": %v", url, err)
 		return "<b>Error connecting to Steam API!</b>"
 	}
-	defer req.Body.Close()
+	defer resp1.Body.Close()
 
 	var data SteamResponse
-	if err := json.NewDecoder(req.Body).Decode(&data); err != nil {
+	if err := json.NewDecoder(resp1.Body).Decode(&data); err != nil {
 		return "Error parsing response!"
 	}
 
@@ -72,13 +83,24 @@ func formatAppOnlineMessage(ctx context.Context, app *App, isSingleMatch bool, u
 	url = fmt.Sprintf("https://store.steampowered.com/api/appdetails?appids=%d&filters=release_date", app.AppID)
 	req, err = http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
+		log.Printf("[ERROR] failed to create request with context to get online right now to url \"%s\": %v", url, err)
+	}
+
+	resp2, err := http.DefaultClient.Do(req)
+	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			log.Println("[CONTEXT WARN] timeout in formating message")
+			return "<b>Error: Operation timed out. Steam API is taking too long to respond. Please try again.</b>"
+		}
+		log.Printf("[ERROR] something went wrong executing the request for \"%s\": %v", url, err)
 		return "<b>Error connecting to Steam API!</b>"
 	}
-	defer req.Body.Close()
+	defer resp2.Body.Close()
 
 	appIDStr := strconv.Itoa(app.AppID)
 	var result map[string]AppDetails
-	if err := json.NewDecoder(req.Body).Decode(&result); err != nil {
+	if err := json.NewDecoder(resp2.Body).Decode(&result); err != nil {
+		log.Printf("[ERROR] failed to parse http response: %v", err)
 		return "Error parsing response!"
 	}
 
@@ -97,6 +119,10 @@ func formatAppOnlineMessage(ctx context.Context, app *App, isSingleMatch bool, u
 	query1 := `INSERT INTO game_stats (app_id, online_count) VALUES (?, ?);`
 	_, err = db.ExecContext(ctx, query1, app.AppID, online_count)
 	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			log.Println("[CONTEXT WARN] timeout in formating message")
+			return "<b>Error: Operation timed out. Steam API is taking too long to respond. Please try again.</b>"
+		}
 		log.Printf("[ERROR] failed to insert game online stats into database: %v", err)
 	}
 
@@ -111,7 +137,10 @@ func formatAppOnlineMessage(ctx context.Context, app *App, isSingleMatch bool, u
 	err = db.QueryRowContext(ctx, query2, app.AppID).Scan(&gamestat.AppID, &gamestat.OnlineCount, &gamestat.CheckedAt)
 
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, context.DeadlineExceeded) {
+			log.Println("[CONTEXT WARN] timeout in formating message")
+			return "<b>Error: Operation timed out. Steam API is taking too long to respond. Please try again.</b>"
+		} else if errors.Is(err, sql.ErrNoRows) {
 			// just means there is no data about yesterday game's online
 		} else {
 			log.Printf("[ERROR] failed to get app online yesterday: %v", err)
@@ -129,6 +158,10 @@ func formatAppOnlineMessage(ctx context.Context, app *App, isSingleMatch bool, u
 		var timezone string
 		err := db.QueryRowContext(ctx, query3, userID).Scan(&timezone)
 		if err != nil {
+			if errors.Is(err, context.DeadlineExceeded) {
+				log.Println("[CONTEXT WARN] timeout in formating message")
+				return "<b>Error: Operation timed out. Steam API is taking too long to respond. Please try again.</b>"
+			}
 			log.Printf("[ERROR] failed to apply timezone for text message: %v", err)
 		}
 
@@ -199,10 +232,18 @@ func getCachedPhotoPath(ctx context.Context, appID int) string {
 
 	url := fmt.Sprintf("https://cdn.akamai.steamstatic.com/steam/apps/%d/header.jpg", appID)
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil || req.Response.StatusCode != http.StatusOK {
+	if err != nil {
+		log.Printf("[ERROR] failed to create request with context to get header photo to url \"%s\": %v", url, err)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil || resp.StatusCode != http.StatusOK {
+		if errors.Is(err, context.DeadlineExceeded) {
+			log.Println("[CONTEXT WARN] timeout in get photo")
+		}
 		return ""
 	}
-	defer req.Body.Close()
+	defer resp.Body.Close()
 
 	file, err := os.Create(path)
 	if err != nil {
@@ -210,7 +251,7 @@ func getCachedPhotoPath(ctx context.Context, appID int) string {
 	}
 	defer file.Close()
 
-	io.Copy(file, req.Body) // copy url's jpg to file
+	io.Copy(file, resp.Body) // copy url's jpg to file
 
 	return path
 }
@@ -315,10 +356,18 @@ func getAppList(ctx context.Context) {
 	url := "https://raw.githubusercontent.com/jsnli/steamappidlist/refs/heads/master/data/games_appid.json"
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		log.Printf("[ERROR] failed to get app list: %v", err)
+		log.Printf("[ERROR] failed to create request with context to get app list json to url \"%s\": %v", url, err)
 		return
 	}
-	defer req.Body.Close()
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			log.Println("[CONTEXT WARN] timeout in get app list json")
+		}
+		log.Printf("[ERROR] failed to get app list: %v", err)
+	}
+	defer resp.Body.Close()
 
 	file, err := os.Create("temp.json")
 	if err != nil {
@@ -326,7 +375,7 @@ func getAppList(ctx context.Context) {
 		return
 	}
 
-	bytesWritten, err := io.Copy(file, req.Body)
+	bytesWritten, err := io.Copy(file, resp.Body)
 	if err != nil {
 		file.Close()
 		log.Printf("[ERROR] failed to copy app list stream to file: %v", err)
@@ -357,6 +406,9 @@ func setupCron() {
 	c := cron.New()
 
 	_, err := c.AddFunc("0 3 * * *", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
+		defer cancel()
+
 		getAppList(ctx)
 	})
 	if err != nil {
@@ -393,6 +445,7 @@ func isValidTimeZone(input string) (bool, *time.Location) {
 // SENDING MESSAGE FUNCTIONS
 
 func sendFinalMessage(bot *tgbotapi.BotAPI, chatID int64, app *App, text string) {
+	ctx := context.TODO()
 	pathToPhoto := getCachedPhotoPath(ctx, app.AppID)
 	keyboard := createCheckAgainKeyboard(app.AppID)
 
