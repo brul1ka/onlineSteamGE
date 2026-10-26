@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -39,7 +40,7 @@ func getAppsByName(name string) ([]*App, []string) {
 	return nil, filtered
 }
 
-func formatAppOnlineMessage(app *App, isSingleMatch bool, userID int64) string {
+func formatAppOnlineMessage(ctx context.Context, app *App, isSingleMatch bool, userID int64) string {
 	if app == nil {
 		return "There is no such game with this name!"
 	}
@@ -47,16 +48,19 @@ func formatAppOnlineMessage(app *App, isSingleMatch bool, userID int64) string {
 		return "Not valid message"
 	}
 
+	ctx, cancel := context.WithTimeout(ctx, 6*time.Second)
+	defer cancel()
+
 	// get number of online rn in app
 	url := fmt.Sprintf("https://api.steampowered.com/ISteamUserStats/GetNumberOfCurrentPlayers/v1/?appid=%d", app.AppID)
-	resp, err := http.Get(url)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return "<b>Error connecting to Steam API!</b>"
 	}
-	defer resp.Body.Close()
+	defer req.Body.Close()
 
 	var data SteamResponse
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+	if err := json.NewDecoder(req.Body).Decode(&data); err != nil {
 		return "Error parsing response!"
 	}
 
@@ -66,15 +70,15 @@ func formatAppOnlineMessage(app *App, isSingleMatch bool, userID int64) string {
 
 	// end of getting online, now we getting release date
 	url = fmt.Sprintf("https://store.steampowered.com/api/appdetails?appids=%d&filters=release_date", app.AppID)
-	resp, err = http.Get(url)
+	req, err = http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return "<b>Error connecting to Steam API!</b>"
 	}
-	defer resp.Body.Close()
+	defer req.Body.Close()
 
 	appIDStr := strconv.Itoa(app.AppID)
 	var result map[string]AppDetails
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.NewDecoder(req.Body).Decode(&result); err != nil {
 		return "Error parsing response!"
 	}
 
@@ -91,7 +95,7 @@ func formatAppOnlineMessage(app *App, isSingleMatch bool, userID int64) string {
 
 	online_count := data.Response.PlayerCount
 	query1 := `INSERT INTO game_stats (app_id, online_count) VALUES (?, ?);`
-	_, err = db.Exec(query1, app.AppID, online_count)
+	_, err = db.ExecContext(ctx, query1, app.AppID, online_count)
 	if err != nil {
 		log.Printf("[ERROR] failed to insert game online stats into database: %v", err)
 	}
@@ -104,11 +108,11 @@ func formatAppOnlineMessage(app *App, isSingleMatch bool, userID int64) string {
 			ORDER BY checked_at DESC;
 			`
 	var gamestat GameStat
-	err = db.QueryRow(query2, app.AppID).Scan(&gamestat.AppID, &gamestat.OnlineCount, &gamestat.CheckedAt)
+	err = db.QueryRowContext(ctx, query2, app.AppID).Scan(&gamestat.AppID, &gamestat.OnlineCount, &gamestat.CheckedAt)
 
 	if err != nil {
 		if err == sql.ErrNoRows {
-
+			// just means there is no data about yesterday game's online
 		} else {
 			log.Printf("[ERROR] failed to get app online yesterday: %v", err)
 		}
@@ -123,7 +127,7 @@ func formatAppOnlineMessage(app *App, isSingleMatch bool, userID int64) string {
 				   WHERE user_id = ?;`
 
 		var timezone string
-		err := db.QueryRow(query3, userID).Scan(&timezone)
+		err := db.QueryRowContext(ctx, query3, userID).Scan(&timezone)
 		if err != nil {
 			log.Printf("[ERROR] failed to apply timezone for text message: %v", err)
 		}
@@ -179,7 +183,10 @@ func getAppByID(id int) *App {
 
 // PHOTO FUNCTIONS
 
-func getCachedPhotoPath(appID int) string {
+func getCachedPhotoPath(ctx context.Context, appID int) string {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
 	cacheDir := "cache"
 	os.MkdirAll("cache", os.ModePerm)
 
@@ -191,11 +198,11 @@ func getCachedPhotoPath(appID int) string {
 	}
 
 	url := fmt.Sprintf("https://cdn.akamai.steamstatic.com/steam/apps/%d/header.jpg", appID)
-	resp, err := http.Get(url)
-	if err != nil || resp.StatusCode != http.StatusOK {
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil || req.Response.StatusCode != http.StatusOK {
 		return ""
 	}
-	defer resp.Body.Close()
+	defer req.Body.Close()
 
 	file, err := os.Create(path)
 	if err != nil {
@@ -203,7 +210,7 @@ func getCachedPhotoPath(appID int) string {
 	}
 	defer file.Close()
 
-	io.Copy(file, resp.Body) // copy url's jpg to file
+	io.Copy(file, req.Body) // copy url's jpg to file
 
 	return path
 }
@@ -301,14 +308,17 @@ func loadApps() *[]App {
 	return &apps
 }
 
-func getAppList() {
+func getAppList(ctx context.Context) {
+	ctx, cancel := context.WithTimeout(ctx, 40*time.Second)
+	defer cancel()
+
 	url := "https://raw.githubusercontent.com/jsnli/steamappidlist/refs/heads/master/data/games_appid.json"
-	resp, err := http.Get(url)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		log.Printf("[ERROR] failed to get app list: %v", err)
 		return
 	}
-	defer resp.Body.Close()
+	defer req.Body.Close()
 
 	file, err := os.Create("temp.json")
 	if err != nil {
@@ -316,7 +326,7 @@ func getAppList() {
 		return
 	}
 
-	bytesWritten, err := io.Copy(file, resp.Body)
+	bytesWritten, err := io.Copy(file, req.Body)
 	if err != nil {
 		file.Close()
 		log.Printf("[ERROR] failed to copy app list stream to file: %v", err)
@@ -346,7 +356,9 @@ func getAppList() {
 func setupCron() {
 	c := cron.New()
 
-	_, err := c.AddFunc("0 3 * * *", getAppList)
+	_, err := c.AddFunc("0 3 * * *", func() {
+		getAppList(ctx)
+	})
 	if err != nil {
 		log.Printf("[ERROR] failed to schedule getting fresh app list JSON: %v", err)
 	}
@@ -381,7 +393,7 @@ func isValidTimeZone(input string) (bool, *time.Location) {
 // SENDING MESSAGE FUNCTIONS
 
 func sendFinalMessage(bot *tgbotapi.BotAPI, chatID int64, app *App, text string) {
-	pathToPhoto := getCachedPhotoPath(app.AppID)
+	pathToPhoto := getCachedPhotoPath(ctx, app.AppID)
 	keyboard := createCheckAgainKeyboard(app.AppID)
 
 	var msg tgbotapi.Chattable

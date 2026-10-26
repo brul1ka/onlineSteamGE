@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -10,12 +11,14 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
+var ctx context.Context = context.Background()
+
 func handleAppRequest(name string, userID int64) (string, []string, []*App) {
 	matches, suggestions := getAppsByName(name)
 
 	if len(matches) > 0 {
 		if len(matches) == 1 {
-			return formatAppOnlineMessage(matches[0], false, userID), nil, matches
+			return formatAppOnlineMessage(ctx, matches[0], false, userID), nil, matches
 		}
 		return "Found several games with this name. Please choose:", nil, matches
 	}
@@ -27,7 +30,7 @@ func handleAppRequest(name string, userID int64) (string, []string, []*App) {
 			// check that getAppsByName actually found something
 			// and returned exactly one game (in case there are no duplicates under that name)
 			if len(app) == 1 {
-				return formatAppOnlineMessage(app[0], true, userID), nil, app
+				return formatAppOnlineMessage(ctx, app[0], true, userID), nil, app
 			}
 
 			// If there are multiple apps hidden under this "single" name in the database,
@@ -77,7 +80,7 @@ func handleCallback(bot *tgbotapi.BotAPI, cb *tgbotapi.CallbackQuery) {
 
 		app := getAppByID(id)
 		if app != nil {
-			msgText := formatAppOnlineMessage(app, false, cb.From.ID)
+			msgText := formatAppOnlineMessage(ctx, app, false, cb.From.ID)
 			sendFinalMessage(bot, chatID, app, msgText)
 		} else {
 			msg := tgbotapi.NewMessage(chatID, "⚠️ Game info lost. Please search again.")

@@ -41,7 +41,7 @@ func main() {
 	u.Timeout = 60
 	updates := bot.GetUpdatesChan(u)
 
-	getAppList()
+	getAppList(ctx)
 	go setupCron()
 
 	setupCommandMenus(bot, int64(adminChatID))
